@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Casino de Chelo</title>
+<style>
+  :root { --bg: #13131a; --card: #1e1e2d; --text: #f1f1f7; --accent: #ffcc00; --muted: #9fa3b2; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Segoe UI",Arial,sans-serif;color:var(--text);background:radial-gradient(circle at 20% 20%,#2a1f45 0%,var(--bg) 60%,#0f0f1a 100%);}
+  .app{max-width:1024px;margin:0 auto;padding:1rem;}
+  header{text-align:center; padding:1rem;}
+  h1{margin:.3rem 0;font-size:clamp(1.8rem,3vw,3rem);color:var(--accent);}
+  .lead{color:var(--muted);}
+  .panel{background:var(--card);border:1px solid rgba(255,204,0,.3);border-radius:16px;padding:1rem;margin:1rem 0;box-shadow:0 8px 24px rgba(0,0,0,.4);} 
+  .hidden{display:none;}
+  button, select, input{font-size:1rem; border:none; border-radius:8px; padding:.6rem 1rem; color:#1e1e25; background:var(--accent); cursor:pointer; transition:.2s;}
+  button:hover, select:hover, input:hover{opacity:.95;}
+  .secondary{background:#3a405e;color:white;}
+  .status{display:flex;gap:.8rem;align-items:center; justify-content:center; margin-top:.5rem;}
+  .board{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;border:2px solid #ffd700;border-radius:12px;padding:6px;background:linear-gradient(45deg,#2a2c39,#1e2232);}
+  .cell{height:32px;display:flex;align-items:center;justify-content:center;font-size:.8rem;border-radius:4px;background:#2a2c39;color:#fff;}
+  .cell.zero{grid-column:1 / span 2;background:#2b2b39;color:#fff;}
+  .cell.red{background:#d21e2b;} .cell.black{background:#0d0f15;} .cell.green{background:#028a3c;}
+  .chips{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin:.75rem 0;}
+  .chip{width:52px;height:52px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-weight:700;border:2px solid #fff;text-shadow:0 0 8px rgba(0,0,0,.4);}
+  .chip10{background:#e0d700;} .chip20{background:#00aaff;} .chip50{background:#ff6f00;} .chip100{background:#10d210;} .chip500{background:#c100ff;}
+  .game-tabs{display:flex;justify-content:center;gap:1rem;margin:1rem 0;}
+  .table{width:100%;border-spacing:4px;margin-top:.5rem;}
+  .table td, .table th{padding:.3rem .5rem;text-align:center;border-radius:6px;background:#232742;color:#fff;}
+  .wheel-visual{width:280px;height:280px;margin:0 auto 1rem;border:6px solid gold;border-radius:50%;position:relative;overflow:hidden;background:radial-gradient(circle,#096d20 0%,#021204 70%);}
+  .wheel-pointer{width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-bottom:22px solid var(--accent);position:absolute;top:-12px;left:calc(50% - 14px);z-index:2;}
+  .wheel-numbers{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:100%;height:100%;transition:transform 3s ease-out;}
+  .wheel-number{position:absolute;left:50%;top:5%;transform-origin:50% 120px;}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+<h1>Casino de Chelo</h1>
+<p class="lead">Ruleta, tragamonedas y poker con saldo real simulado.</p>
+</header>
+
+<section id="login" class="panel">
+<h2>Registrar jugador</h2>
+<input id="playerName" type="text" placeholder="Tu nombre" style="width:100%;max-width:320px;"><br><br>
+<button id="startBtn">Entrar al casino</button>
+<p class="muted">Saldo inicial: $1000</p>
+</section>
+
+<section id="menu" class="panel hidden">
+<h2>👾 Selecciona tu juego</h2>
+<div class="game-tabs">
+<button class="game-btn" data-game="ruleta">Ruleta</button>
+<button class="game-btn" data-game="tragamonedas">Tragamonedas</button>
+<button class="game-btn" data-game="poker">Poker</button>
+</div>
+<p class="status"><span>👤 <strong id="displayUser"></strong></span><span>💰 Saldo: $<strong id="displaySaldo"></strong></span></p>
+</section>
+
+<section id="game" class="panel hidden">
+<div style="display:flex;justify-content:space-between;align-items:center;"><h2 id="gameTitle"></h2><button class="secondary" id="backBtn">⬅ Volver</button></div>
+<p class="status"><span>👤 <strong id="gameUser"></strong></span><span>💰 Saldo: $<strong id="gameSaldo"></strong></span></p>
+<div id="gameArea"></div>
+<p id="gameMessage" style="margin-top:1rem;font-size:1rem;"></p>
+</section>
+</div>
+
+<script>
+const login = document.getElementById('login');
+const menu = document.getElementById('menu');
+const game = document.getElementById('game');
+const gameArea = document.getElementById('gameArea');
+const gameTitle = document.getElementById('gameTitle');
+const displaySaldo = document.getElementById('displaySaldo');
+const displayUser = document.getElementById('displayUser');
+const gameSaldo = document.getElementById('gameSaldo');
+const gameUser = document.getElementById('gameUser');
+const gameMessage = document.getElementById('gameMessage');
+const gameButtons = document.querySelectorAll('.game-btn');
+const backBtn = document.getElementById('backBtn');
+
+let user = localStorage.getItem('usuario') || '';
+let saldo = parseInt(localStorage.getItem('saldo'),10) || 1000;
+let currentGame = '';
+let currentBet = 10;
+let selectedNumber = 0;
+
+function save() { localStorage.setItem('usuario', user); localStorage.setItem('saldo', saldo); }
+function updateUI(){ displayUser.textContent=user; displaySaldo.textContent=saldo; gameUser.textContent=user; gameSaldo.textContent=saldo; }
+
+if(user){ login.classList.add('hidden'); menu.classList.remove('hidden'); updateUI(); }
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  const name = document.getElementById('playerName').value.trim();
+  if(!name){ alert('Ingresá tu nombre.'); return; }
+  user=name; saldo=1000; save(); updateUI(); login.classList.add('hidden'); menu.classList.remove('hidden');
+});
+
+gameButtons.forEach(btn => btn.addEventListener('click', () => mostrarJuego(btn.dataset.game)));
+backBtn.addEventListener('click', () => { game.classList.add('hidden'); menu.classList.remove('hidden'); gameMessage.textContent = ''; });
+
+function mostrarJuego(juego){currentGame=juego; menu.classList.add('hidden'); game.classList.remove('hidden'); gameMessage.textContent=''; gameTitle.textContent = juego === 'ruleta' ? 'Ruleta 🎰' : juego === 'tragamonedas' ? 'Tragamonedas 🎰' : 'Poker 🃏'; updateUI();
+  if(juego==='ruleta') return initRuleta();
+  if(juego==='tragamonedas') return initTragamonedas();
+  initPoker();
+}
+
+function initRuleta(){
+  const numbers = [...Array(37).keys()];
+  const colors = num => num===0?'green':[1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36].includes(num)?'red':'black';
+  let wheelNumbersHtml = numbers.map(num=>`<div class="cell ${num===0?'zero':''} ${colors(num)}">${num}</div>`).join('');
+  gameArea.innerHTML = `
+    <div class="wheel-visual"><div class="wheel-pointer"></div><div class="wheel-numbers" id="wheelNumbers"></div></div>
+    <div class="chips">
+      <div class="chip chip10" onclick="setBet(10)">$10</div>
+      <div class="chip chip20" onclick="setBet(20)">$20</div>
+      <div class="chip chip50" onclick="setBet(50)">$50</div>
+      <div class="chip chip100" onclick="setBet(100)">$100</div>
+      <div class="chip chip500" onclick="setBet(500)">$500</div>
+    </div>
+    <p>Tu apuesta: $<span id="ruletaBet">${currentBet}</span></p>
+    <p>Seleccionar número (0 a 36): <input id="ruletaNum" type="number" min="0" max="36" value="0" style="width:70px;"></p>
+    <button onclick="spinRuleta()">Girar</button>
+    <div class="board" id="ruletaBoard"></div>
+    <p id="ruletaResult"></p>`;
+  document.getElementById('ruletaBoard').innerHTML = wheelNumbersHtml;
+  const wheelNumbersEl = document.getElementById('wheelNumbers');
+  wheelNumbersEl.innerHTML = numbers.map((n,i)=>`<div class="wheel-number" style="transform: rotate(${i*9.73}deg);"><span>${n}</span></div>`).join('');
+}
+
+window.setBet = v => {currentBet=v; document.getElementById('ruletaBet').textContent=v;};
+window.spinRuleta = () => {
+  if(saldo < currentBet){ alert('Saldo insuficiente'); return; }
+  const chosen = Number(document.getElementById('ruletaNum').value);
+  if(isNaN(chosen) || chosen<0 || chosen>36){ alert('Elige número 0-36'); return; }
+  const result = Math.floor(Math.random()*37);
+  const wb = document.querySelector('.wheel-numbers');
+  const angle = 1440 + result * (360/37);
+  wb.style.transform = `translate(-50%, -50%) rotate(${-angle}deg)`;
+
+  let gain = 0; let message;
+  if(result===chosen){ gain = currentBet*35; message = `¡Número exacto! Ganás $${gain}`; }
+  else if(result!==0 && (result%2)=== (chosen%2) && chosen!==0){ gain = currentBet; message = `Color/paridad coincide. Ganás $${gain}`; }
+  else { gain = -currentBet; message = `Perdiste $${currentBet}. salió ${result}`; }
+  saldo += gain;
+  if(gain > 0) message += ` (nuevo saldo $${saldo})`; else message += ` (saldo $${saldo})`;
+  document.getElementById('ruletaResult').textContent = message;
+  gameMessage.textContent = message;
+  updateUI(); save();
+};
+
+function initTragamonedas(){
+  gameArea.innerHTML = `
+    <p>Apuesta mínima $10, máxima $100</p>
+    <input id="slotBet" type="number" min="10" max="100" value="10" style="width:100px;"><br><br>
+    <button onclick="playSlot()">Girar</button>
+    <p id="slotResult"></p>
+    <div id="slotReels" style="display:flex;gap:8px;justify-content:center;font-size:2rem;margin-top:10px;"></div>
+  `;
+}
+
+window.playSlot = () => {
+  const bet = Number(document.getElementById('slotBet').value);
+  if(!bet || bet<10 || bet>100){ alert('Apuesta válida: 10-100'); return; }
+  if(saldo < bet){ alert('Saldo insuficiente'); return; }
+  const symbols = ['🍒','🍋','🍉','⭐','💎'];
+  const r = [symbols[Math.floor(Math.random()*symbols.length)], symbols[Math.floor(Math.random()*symbols.length)], symbols[Math.floor(Math.random()*symbols.length)]];
+  document.getElementById('slotReels').textContent = r.join(' ');
+  let prize=0; let msg='';
+  if(r[0]===r[1] && r[1]===r[2]){ prize = bet*5; msg='JACKPOT🎉 '+r[0]+' '+'Ganaste '+prize; }
+  else if(r[0]===r[1] || r[1]===r[2] || r[0]===r[2]){ prize = bet*2; msg='Pareja 👌 Ganaste '+prize; }
+  else { prize = -bet; msg='Perdiste '+bet; }
+  saldo += prize; document.getElementById('slotResult').textContent = msg + ' | Saldo: $'+saldo; updateUI(); save();
+};
+
+function initPoker(){
+  const suits=['♠','♥','♦','♣']; const ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  gameArea.innerHTML=`<p>Se repartirá mano aleatoria, la apuesta es $50.</p><button onclick="playPoker()">Repartir</button><p id="pokerResult"></p><div id="pokerHand" style="display:flex;gap:.5rem;justify-content:center;margin-top:.5rem;"></div>`;
+}
+
+window.playPoker = () => {
+  const bet = 50; if(saldo < bet){alert('Saldo insuficiente'); return;}
+  const deck=[]; const suits=['♠','♥','♦','♣']; const ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  suits.forEach(s=>ranks.forEach(r=>deck.push(r+s)));
+  for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}
+  const hand=deck.slice(0,5);
+  const values=hand.map(c=>ranks.indexOf(c.slice(0,-1))+1).sort((a,b)=>a-b);
+  const isPair=values.some((v,i)=>i<4&&v===values[i+1]);
+  const isTwoPair=true; // simplified
+  const isThree=values.some((v,i)=>i<3&&v===values[i+1]&&v===values[i+2]);
+  const isStraight=values[4]-values[0]===4&&new Set(values).size===5;
+  let gain=-bet; let msg='Perdiste '+bet;
+  if(isStraight){gain=bet*4;msg='Escalera! Ganaste '+gain;}
+  else if(isThree){gain=bet*3;msg='Trío! Ganaste '+gain;}
+  else if(isPair){gain=bet*2;msg='Pareja! Ganaste '+gain;}
+  saldo += gain;
+  document.getElementById('pokerHand').innerHTML = hand.map(c=>`<div style="padding:.4rem .7rem;border:2px solid gold;border-radius:8px;background:#1f1d32;font-weight:700;">${c}</div>`).join('');
+  document.getElementById('pokerResult').textContent = msg + ' | Saldo: '+saldo;
+  updateUI(); save();
+};
+
+function volver(){ menu.classList.remove('hidden'); game.classList.add('hidden'); save(); }
+</script>
+</body>
+</html>
